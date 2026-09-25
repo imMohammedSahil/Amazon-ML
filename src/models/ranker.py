@@ -1,3 +1,4 @@
+from tqdm.auto import tqdm
 from typing import Dict, List, Tuple
 import numpy as np
 import polars as pl
@@ -42,32 +43,25 @@ class EntityRanker:
         self.models = []
 
         gkf = GroupKFold(n_splits=n_folds)
+        folds = list(gkf.split(X, y, groups))
 
-        for fold, (train_idx, val_idx) in enumerate(gkf.split(X, y, groups)):
-            X_train, y_train = X[train_idx], y[train_idx]
-            X_val, y_val = X[val_idx], y[val_idx]
+        for fold, (train_idx, val_idx) in enumerate(tqdm(folds, desc="Training folds", unit="fold")):
+                X_train, y_train = X[train_idx], y[train_idx]
+                X_val, y_val = X[val_idx], y[val_idx]
 
-            # If a fold doesn't have both 0 and 1 classes in training, use simple uniform probability
-            unique_train_classes = np.unique(y_train)
-            if len(unique_train_classes) < 2:
-                default_p = float(unique_train_classes[0]) if len(unique_train_classes) == 1 else 0.5
-                oof_preds[val_idx] = default_p
-                continue
-
-            model = lgb.LGBMClassifier(**self.params)
-            # Only use early stopping eval_set if validation set contains same classes
-            if set(np.unique(y_val)).issubset(set(unique_train_classes)):
+                model = lgb.LGBMClassifier(**self.params)
                 model.fit(
                     X_train, y_train,
                     eval_set=[(X_val, y_val)],
-                    callbacks=[lgb.early_stopping(stopping_rounds=50, verbose=False)]
-                )
-            else:
-                model.fit(X_train, y_train)
+                    callbacks=[
+                        lgb.early_stopping(stopping_rounds=50, verbose=False),
+                        lgb.log_evaluation(period=50)
+            ]
+        )
 
-            val_preds = model.predict_proba(X_val)[:, 1]
-            oof_preds[val_idx] = val_preds
-            self.models.append(model)
+                val_preds = model.predict_proba(X_val)[:, 1]
+                oof_preds[val_idx] = val_preds
+                self.models.append(model)
 
         return oof_preds, self.models
 
