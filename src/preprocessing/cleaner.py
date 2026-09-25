@@ -1,8 +1,8 @@
 import re
 import unicodedata
 import polars as pl
+import jellyfish
 
-# Legal business suffixes dictionary for normalization
 LEGAL_SUFFIXES = [
     r"\bincorporated\b", r"\binc\b",
     r"\blimited liability company\b", r"\bllc\b", r"\bllp\b",
@@ -15,7 +15,6 @@ LEGAL_SUFFIXES = [
 ]
 LEGAL_SUFFIX_REGEX = re.compile("|".join(LEGAL_SUFFIXES), re.IGNORECASE)
 
-# Address abbreviations mapping
 ADDRESS_ABBR = {
     r"\bstreet\b": "st",
     r"\bavenue\b": "ave",
@@ -35,7 +34,6 @@ ADDRESS_ABBR = {
 
 
 def strip_accents(text: str) -> str:
-    """Removes unicode accents (e.g., 'café' -> 'cafe', 'Société' -> 'Societe')."""
     if not text:
         return ""
     return ''.join(
@@ -45,17 +43,14 @@ def strip_accents(text: str) -> str:
 
 
 def clean_text_field(text: str) -> str:
-    """Standardizes string: lowercase, strips accents, removes punctuation."""
     if text is None or text == "":
         return ""
     text = strip_accents(str(text).lower())
     text = re.sub(r"[^\w\s]", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def clean_name_field(text: str) -> str:
-    """Cleans business name and removes legal corporate suffixes."""
     cleaned = clean_text_field(text)
     if not cleaned:
         return ""
@@ -64,7 +59,6 @@ def clean_name_field(text: str) -> str:
 
 
 def clean_phone_field(phone: str) -> str:
-    """Extracts only raw digits from phone string, taking the last 10 digits if longer."""
     if phone is None or phone == "":
         return ""
     digits = re.sub(r"\D", "", str(phone))
@@ -72,7 +66,6 @@ def clean_phone_field(phone: str) -> str:
 
 
 def clean_address_field(address: str) -> str:
-    """Cleans address and normalizes road/unit abbreviations."""
     cleaned = clean_text_field(address)
     if not cleaned:
         return ""
@@ -81,23 +74,50 @@ def clean_address_field(address: str) -> str:
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
+def precompute_phonetic_metaphone(name: str) -> str:
+    if not name:
+        return ""
+    try:
+        return jellyfish.metaphone(name[:25])
+    except Exception:
+        return ""
+
+
+def precompute_phonetic_soundex(name: str) -> str:
+    if not name:
+        return ""
+    try:
+        return jellyfish.soundex(name[:25])
+    except Exception:
+        return ""
+
+
+def extract_street_digits_str(addr: str) -> str:
+    if not addr:
+        return ""
+    digits = re.findall(r"\b\d+\b", str(addr))
+    return " ".join(digits) if digits else ""
+
+
+def extract_first_two_tokens(name: str) -> str:
+    if not name:
+        return ""
+    tokens = [t for t in name.split() if len(t) > 1]
+    return " ".join(tokens[:2]) if tokens else ""
+
+
 class DataPreprocessor:
     """
-    High-performance preprocessor for business entity tables.
-    Works natively on Polars DataFrames using vectorized map operations.
+    High-performance, precomputing preprocessor.
+    Precomputes phonetics, first tokens, and street digits ONCE per entity to eliminate
+    redundant computations during pairwise feature extraction.
     """
     def __init__(self):
         pass
 
     def clean_table(self, df: pl.DataFrame, source_name: str = "") -> pl.DataFrame:
-        """
-        Cleans and normalizes all fields in an entity table.
-        Automatically maps entity_id -> id, business_name -> name, business_address -> address.
-        Adds clean_* columns for downstream blocking and feature extraction.
-        """
         cols = df.columns
         
-        # Column standardization mapping
         id_col = "entity_id" if "entity_id" in cols else ("id" if "id" in cols else cols[0])
         name_col = "business_name" if "business_name" in cols else ("name" if "name" in cols else None)
         addr_col = "business_address" if "business_address" in cols else ("address" if "address" in cols else None)
@@ -108,28 +128,21 @@ class DataPreprocessor:
         zip_col = "zip" if "zip" in cols else None
 
         expressions = [
-            # ID column
             pl.col(id_col).cast(pl.Utf8).alias("id"),
-            # Source indicator column
             pl.lit(source_name).alias("source") if "source" not in cols else pl.col("source"),
             
-            # Clean Name
             (pl.col(name_col).fill_null("").map_elements(clean_name_field, return_dtype=pl.Utf8) if name_col 
              else pl.lit("")).alias("clean_name"),
             
-            # Raw Clean Name
             (pl.col(name_col).fill_null("").map_elements(clean_text_field, return_dtype=pl.Utf8) if name_col 
              else pl.lit("")).alias("clean_name_raw"),
             
-            # Clean Address
             (pl.col(addr_col).fill_null("").map_elements(clean_address_field, return_dtype=pl.Utf8) if addr_col 
              else pl.lit("")).alias("clean_address"),
             
-            # Clean Country
             (pl.col(country_col).fill_null("").map_elements(clean_text_field, return_dtype=pl.Utf8) if country_col 
              else pl.lit("")).alias("clean_country"),
             
-            # Clean City, State, Zip, Phone (if present, else empty strings)
             (pl.col(city_col).fill_null("").map_elements(clean_text_field, return_dtype=pl.Utf8) if city_col 
              else pl.lit("")).alias("clean_city"),
             (pl.col(state_col).fill_null("").map_elements(clean_text_field, return_dtype=pl.Utf8) if state_col 
@@ -142,11 +155,19 @@ class DataPreprocessor:
         
         cleaned_df = df.with_columns(expressions)
         
-        # Combined full address string for cross-field blocking
+        # Combined full address
         cleaned_df = cleaned_df.with_columns(
             (pl.col("clean_address") + " " + pl.col("clean_city") + " " + pl.col("clean_state") + " " + pl.col("clean_zip"))
             .str.strip_chars()
             .alias("clean_full_address")
         )
+        
+        # Precompute phonetic keys, first tokens, and street digits ONCE
+        cleaned_df = cleaned_df.with_columns([
+            pl.col("clean_name").map_elements(precompute_phonetic_metaphone, return_dtype=pl.Utf8).alias("meta_key"),
+            pl.col("clean_name").map_elements(precompute_phonetic_soundex, return_dtype=pl.Utf8).alias("soundex_key"),
+            pl.col("clean_name").map_elements(extract_first_two_tokens, return_dtype=pl.Utf8).alias("name_first_tokens"),
+            pl.col("clean_full_address").map_elements(extract_street_digits_str, return_dtype=pl.Utf8).alias("street_digits_str")
+        ])
         
         return cleaned_df
