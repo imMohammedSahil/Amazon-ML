@@ -1,0 +1,37 @@
+# Python & Virtual Environments
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Large Data files & competition datasets (CRITICAL: Do not push gigabytes to Git)
+6ab10eb3b23ba_student_resource/
+data/
+raw_data/
+*.csv
+*.parquet
+*.feather
+*.h5
+*.pkl
+*.npy
+*.npz
+
+# Model artifacts & temporary caches
+models_cache/
+checkpoints/
+artifacts/
+logs/
+submission/
+*.log
