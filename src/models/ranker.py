@@ -47,12 +47,23 @@ class EntityRanker:
             X_train, y_train = X[train_idx], y[train_idx]
             X_val, y_val = X[val_idx], y[val_idx]
 
+            # If a fold doesn't have both 0 and 1 classes in training, use simple uniform probability
+            unique_train_classes = np.unique(y_train)
+            if len(unique_train_classes) < 2:
+                default_p = float(unique_train_classes[0]) if len(unique_train_classes) == 1 else 0.5
+                oof_preds[val_idx] = default_p
+                continue
+
             model = lgb.LGBMClassifier(**self.params)
-            model.fit(
-                X_train, y_train,
-                eval_set=[(X_val, y_val)],
-                callbacks=[lgb.early_stopping(stopping_rounds=50, verbose=False)]
-            )
+            # Only use early stopping eval_set if validation set contains same classes
+            if set(np.unique(y_val)).issubset(set(unique_train_classes)):
+                model.fit(
+                    X_train, y_train,
+                    eval_set=[(X_val, y_val)],
+                    callbacks=[lgb.early_stopping(stopping_rounds=50, verbose=False)]
+                )
+            else:
+                model.fit(X_train, y_train)
 
             val_preds = model.predict_proba(X_val)[:, 1]
             oof_preds[val_idx] = val_preds

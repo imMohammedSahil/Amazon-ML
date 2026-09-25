@@ -3,24 +3,43 @@ from pathlib import Path
 # Base Paths
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Dataset paths: check if 6ab10eb3b23ba_student_resource/dataset exists, else fallback to data/
-DATA_STUDENT_DIR = BASE_DIR / "6ab10eb3b23ba_student_resource" / "dataset"
-DATA_STANDARD_DIR = BASE_DIR / "data"
+# Dataset path resolution
+CANDIDATE_DATA_DIRS = [
+    BASE_DIR / "6ab10eb3b23ba_student_resource" / "student_resource" / "dataset",
+    BASE_DIR / "6ab10eb3b23ba_student_resource" / "dataset",
+    BASE_DIR / "data",
+    BASE_DIR / "dataset"
+]
 
-if DATA_STUDENT_DIR.exists():
-    DATA_DIR = DATA_STUDENT_DIR
-else:
-    DATA_DIR = DATA_STANDARD_DIR
+DATA_DIR = None
+for p in CANDIDATE_DATA_DIRS:
+    if p.exists():
+        DATA_DIR = p
+        break
+
+if DATA_DIR is None:
+    DATA_DIR = BASE_DIR / "data"
+
+def find_data_file(filename_stem: str, subfolder: str = "") -> Path:
+    """Finds existing file matching .tsv or .csv in DATA_DIR or DATA_DIR/subfolder."""
+    dirs_to_check = [DATA_DIR / subfolder, DATA_DIR] if subfolder else [DATA_DIR]
+    for d in dirs_to_check:
+        for ext in [".tsv", ".csv"]:
+            candidate = d / f"{filename_stem}{ext}"
+            if candidate.exists():
+                return candidate
+    # Default fallback
+    return (DATA_DIR / subfolder / f"{filename_stem}.csv") if subfolder else (DATA_DIR / f"{filename_stem}.csv")
 
 # Train / Test file paths
-TRAIN_S1_PATH = DATA_DIR / "train_source1.csv"
-TRAIN_S2_PATH = DATA_DIR / "train_source2.csv"
-TRAIN_S3_PATH = DATA_DIR / "train_source3.csv"
-TRAIN_GT_PATH = DATA_DIR / "train_ground_truth.csv"
+TRAIN_S1_PATH = find_data_file("train_source1", "train")
+TRAIN_S2_PATH = find_data_file("train_source2", "train")
+TRAIN_S3_PATH = find_data_file("train_source3", "train")
+TRAIN_GT_PATH = find_data_file("train_ground_truth", "train")
 
-TEST_S1_PATH = DATA_DIR / "test_source1.csv"
-TEST_S2_PATH = DATA_DIR / "test_source2.csv"
-TEST_S3_PATH = DATA_DIR / "test_source3.csv"
+TEST_S1_PATH = find_data_file("test_source1", "test")
+TEST_S2_PATH = find_data_file("test_source2", "test")
+TEST_S3_PATH = find_data_file("test_source3", "test")
 
 OUTPUT_DIR = BASE_DIR / "submission"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

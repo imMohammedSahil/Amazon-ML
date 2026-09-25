@@ -17,6 +17,14 @@ from src.decision.optimizer import DynamicThresholdOptimizer
 from src.evaluation.metrics import evaluate_macro_f05
 
 
+def load_table(path: Path, n_rows: Optional[int] = None) -> pl.DataFrame:
+    """Reads CSV or TSV files with correct delimiter into Polars DataFrame."""
+    sep = "\t" if str(path).endswith(".tsv") else ","
+    if n_rows:
+        return pl.read_csv(path, separator=sep, n_rows=n_rows, truncate_ragged_lines=True, ignore_errors=True)
+    return pl.read_csv(path, separator=sep, truncate_ragged_lines=True, ignore_errors=True)
+
+
 class EntityResolutionPipeline:
     """
     End-to-End Master Entity Resolution Pipeline.
@@ -39,15 +47,16 @@ class EntityResolutionPipeline:
         )
 
     def load_ground_truth(self, gt_path: Path) -> Dict[str, List[str]]:
-        """Loads and parses ground truth CSV into dictionary mapping s1_id -> list of target matched IDs."""
-        gt_df = pl.read_csv(gt_path)
+        """Loads and parses ground truth CSV/TSV into dictionary mapping s1_id -> list of target matched IDs."""
+        gt_df = load_table(gt_path)
         gt_dict = {}
 
-        # Detect target column (e.g. 'matched_ids', 'target', 'matches', etc.)
+        # Detect source1 ID column and target matched IDs column
         cols = gt_df.columns
-        target_col = [c for c in cols if c != "id"][0]
+        id_col = "source1_entity_id" if "source1_entity_id" in cols else ("id" if "id" in cols else cols[0])
+        target_col = "matched_entity_ids" if "matched_entity_ids" in cols else [c for c in cols if c != id_col][0]
 
-        for row in gt_df.select(["id", target_col]).iter_rows():
+        for row in gt_df.select([id_col, target_col]).iter_rows():
             s1_id = str(row[0])
             raw_target = row[1]
 
@@ -83,15 +92,14 @@ class EntityResolutionPipeline:
         start_time = time.time()
 
         print("[1/5] Loading and Preprocessing training data...")
-        df_s1 = pl.read_csv(TRAIN_S1_PATH)
+        df_s1 = load_table(TRAIN_S1_PATH, n_rows=sample_size)
         if sample_size and sample_size < len(df_s1):
             print(f"  * Sampling {sample_size:,} S1 entities for rapid local CV")
-            df_s1 = df_s1.head(sample_size)
             
         s1_clean = self.preprocessor.clean_table(df_s1, source_name="source1")
         
-        df_s2 = pl.read_csv(TRAIN_S2_PATH)
-        df_s3 = pl.read_csv(TRAIN_S3_PATH)
+        df_s2 = load_table(TRAIN_S2_PATH)
+        df_s3 = load_table(TRAIN_S3_PATH)
         s2_clean = self.preprocessor.clean_table(df_s2, source_name="source2")
         s3_clean = self.preprocessor.clean_table(df_s3, source_name="source3")
         satellites_clean = pl.concat([s2_clean, s3_clean])
@@ -188,9 +196,9 @@ class EntityResolutionPipeline:
         out_file = output_path or (OUTPUT_DIR / "submission.csv")
 
         print("[1/4] Loading and Preprocessing test data...")
-        df_test_s1 = pl.read_csv(TEST_S1_PATH)
-        df_test_s2 = pl.read_csv(TEST_S2_PATH)
-        df_test_s3 = pl.read_csv(TEST_S3_PATH)
+        df_test_s1 = load_table(TEST_S1_PATH)
+        df_test_s2 = load_table(TEST_S2_PATH)
+        df_test_s3 = load_table(TEST_S3_PATH)
 
         test_s1_clean = self.preprocessor.clean_table(df_test_s1, source_name="source1")
         test_s2_clean = self.preprocessor.clean_table(df_test_s2, source_name="source2")

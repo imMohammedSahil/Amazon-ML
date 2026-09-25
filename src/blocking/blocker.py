@@ -110,7 +110,7 @@ class MultiPassBlocker:
             ).select([
                 pl.col("id").alias("s1_id"),
                 pl.col("id_candidate").alias("candidate_id"),
-                pl.lit(1.0).alias("tfidf_sim")
+                pl.lit(1.0, dtype=pl.Float32).alias("tfidf_sim")
             ])
             
             # Combine pairs and take max similarity for duplicates

@@ -92,52 +92,55 @@ class DataPreprocessor:
     def clean_table(self, df: pl.DataFrame, source_name: str = "") -> pl.DataFrame:
         """
         Cleans and normalizes all fields in an entity table.
+        Automatically maps entity_id -> id, business_name -> name, business_address -> address.
         Adds clean_* columns for downstream blocking and feature extraction.
         """
         cols = df.columns
         
-        # Build vectorized transformations
-        cleaned_df = df.with_columns([
+        # Column standardization mapping
+        id_col = "entity_id" if "entity_id" in cols else ("id" if "id" in cols else cols[0])
+        name_col = "business_name" if "business_name" in cols else ("name" if "name" in cols else None)
+        addr_col = "business_address" if "business_address" in cols else ("address" if "address" in cols else None)
+        country_col = "country" if "country" in cols else None
+        phone_col = "phone" if "phone" in cols else None
+        city_col = "city" if "city" in cols else None
+        state_col = "state" if "state" in cols else None
+        zip_col = "zip" if "zip" in cols else None
+
+        expressions = [
+            # ID column
+            pl.col(id_col).cast(pl.Utf8).alias("id"),
             # Source indicator column
             pl.lit(source_name).alias("source") if "source" not in cols else pl.col("source"),
             
-            # ID column as string
-            pl.col("id").cast(pl.Utf8).alias("id"),
-            
             # Clean Name
-            pl.col("name").fill_null("").map_elements(
-                clean_name_field, return_dtype=pl.Utf8
-            ).alias("clean_name"),
+            (pl.col(name_col).fill_null("").map_elements(clean_name_field, return_dtype=pl.Utf8) if name_col 
+             else pl.lit("")).alias("clean_name"),
             
-            # Raw cleaned Name (with legal suffix retained for feature comparison)
-            pl.col("name").fill_null("").map_elements(
-                clean_text_field, return_dtype=pl.Utf8
-            ).alias("clean_name_raw"),
+            # Raw Clean Name
+            (pl.col(name_col).fill_null("").map_elements(clean_text_field, return_dtype=pl.Utf8) if name_col 
+             else pl.lit("")).alias("clean_name_raw"),
             
             # Clean Address
-            pl.col("address").fill_null("").map_elements(
-                clean_address_field, return_dtype=pl.Utf8
-            ).alias("clean_address"),
+            (pl.col(addr_col).fill_null("").map_elements(clean_address_field, return_dtype=pl.Utf8) if addr_col 
+             else pl.lit("")).alias("clean_address"),
             
-            # Clean City & State
-            pl.col("city").fill_null("").map_elements(
-                clean_text_field, return_dtype=pl.Utf8
-            ).alias("clean_city"),
-            pl.col("state").fill_null("").map_elements(
-                clean_text_field, return_dtype=pl.Utf8
-            ).alias("clean_state"),
+            # Clean Country
+            (pl.col(country_col).fill_null("").map_elements(clean_text_field, return_dtype=pl.Utf8) if country_col 
+             else pl.lit("")).alias("clean_country"),
             
-            # Clean Zip & Phone
-            pl.col("zip").fill_null("").cast(pl.Utf8).str.replace_all(r"\D", "").alias("clean_zip"),
-            pl.col("phone").fill_null("").map_elements(
-                clean_phone_field, return_dtype=pl.Utf8
-            ).alias("clean_phone"),
-            
-            # Country normalization
-            pl.col("country").fill_null("").map_elements(
-                clean_text_field, return_dtype=pl.Utf8
-            ).alias("clean_country")
-        ])
+            # Clean City, State, Zip, Phone (if present, else empty strings)
+            (pl.col(city_col).fill_null("").map_elements(clean_text_field, return_dtype=pl.Utf8) if city_col 
+             else pl.lit("")).alias("clean_city"),
+            (pl.col(state_col).fill_null("").map_elements(clean_text_field, return_dtype=pl.Utf8) if state_col 
+             else pl.lit("")).alias("clean_state"),
+            (pl.col(zip_col).fill_null("").cast(pl.Utf8).str.replace_all(r"\D", "") if zip_col 
+             else pl.lit("")).alias("clean_zip"),
+            (pl.col(phone_col).fill_null("").map_elements(clean_phone_field, return_dtype=pl.Utf8) if phone_col 
+             else pl.lit("")).alias("clean_phone")
+        ]
+        
+        cleaned_df = df.with_columns(expressions)
         
         # Combined full address string for cross-field blocking
         cleaned_df = cleaned_df.with_columns(
