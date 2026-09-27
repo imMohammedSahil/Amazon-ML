@@ -210,36 +210,32 @@ Each candidate pair `(s1_id, cand_id)` is featurized into a 40-dimensional vecto
 
 ## 5. Ensemble Model Architecture
 
-Five LightGBM binary classifiers are trained independently with varied random seeds, tree depths, and regularization hyperparameters. Final match probability is a weighted ensemble average:
+Five LightGBM binary classifiers are trained independently with varied random seeds, tree depths, and regularization hyperparameters. Predictions are combined via a fixed weighted average:
 
-```
-P_final = 0.25 x P_1 + 0.25 x P_2 + 0.20 x P_3 + 0.15 x P_4 + 0.15 x P_5
-```
+$$P_{\text{final}} = 0.25 \cdot P_1 + 0.25 \cdot P_2 + 0.20 \cdot P_3 + 0.15 \cdot P_4 + 0.15 \cdot P_5$$
 
 **Model configurations:**
 
-| Model | Seed | LR | Leaves | Depth | pos_weight | Rounds |
-|:------|:-----|:---|:-------|:------|:-----------|:-------|
-| M1 | 42 | 0.050 | 85 | 9 | 1.30 | 200 |
-| M2 | 1337 | 0.045 | 95 | 10 | 1.25 | 220 |
-| M3 | 2026 | 0.055 | 75 | 8 | 1.35 | 180 |
-| M4 | 777 | 0.040 | 105 | 10 | 1.20 | 240 |
-| M5 | 999 | 0.035 | 120 | 11 | 1.25 | 260 |
+| Model | Weight | Seed | LR | Leaves | Depth | pos\_weight | reg\_alpha | reg\_lambda | Rounds | Role |
+|:------|:------:|-----:|---:|-------:|------:|------------:|-----------:|------------:|-------:|:-----|
+| M1 | 0.25 | 42 | 0.050 | 85 | 9 | 1.30 | 0.05 | 0.5 | 200 | Primary anchor — balanced generalization |
+| M2 | 0.25 | 1337 | 0.045 | 95 | 10 | 1.25 | 0.10 | 0.8 | 220 | Primary anchor — higher L1/L2 regularization |
+| M3 | 0.20 | 2026 | 0.055 | 75 | 8 | 1.35 | 0.08 | 0.6 | 180 | Shallower trees — reduces overfitting on noisy pairs |
+| M4 | 0.15 | 777 | 0.040 | 105 | 10 | 1.20 | 0.12 | 0.9 | 240 | Wider leaves — captures complex address interactions |
+| M5 | 0.15 | 999 | 0.035 | 120 | 11 | 1.25 | 0.15 | 1.0 | 260 | Deepest/widest — diversity booster, high regularization |
+
+- `pos_weight`: upweights positive (match) class to compensate for class imbalance  
+- `reg_alpha` / `reg_lambda`: L1 / L2 regularization on leaf weights  
+- Weights sum to 1.0; M1 and M2 carry equal highest weight as they demonstrated best individual CV scores
 
 **Post-prediction probability corrections applied after ensemble averaging:**
 
-```
-Rule 1 -- Exact-root boost:
-  IF exact_root=1 AND (same_digits=1 OR same_pin=1):
-      P_final = max(P_final, 0.998)
+| Rule | Condition | Effect |
+|:-----|:----------|:-------|
+| Exact-root boost | `exact_root=1` AND (`same_digits=1` OR `same_pin=1`) | `P_final = max(P_final, 0.998)` — near-certain match |
+| Adjacent door penalty | `adjacent_door_penalty=1` AND `exact_root=0` | `P_final = min(P_final, 0.75)` — cap near-miss door numbers |
+| Transitivity booster | Both S2 and S3 yield score ≥ 0.88 for same S1 | Multiply high-confidence S2 scores by 1.015x |
 
-Rule 2 -- Adjacent door penalty:
-  IF adjacent_door_penalty=1 AND exact_root=0:
-      P_final = min(P_final, 0.75)
-```
-
-**Multi-source transitivity booster:**
-For entities where both S2 and S3 independently yield a high-confidence candidate (score >= 0.88), S2 probabilities are boosted by 1.015x, reflecting cross-source corroboration.
 
 ---
 
