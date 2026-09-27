@@ -107,53 +107,57 @@ Raw Input (S1, S2, S3 TSV files)
 
 Blocking reduces the search space from a full cross-product to a tractable candidate set. All 23 passes run as exact equi-joins on composite keys; the union is deduplicated per `(s1_id, cand_id)`. Country-scoped joins prevent cross-region false positives.
 
-```
-Pass | Key A                  | Key B              | Key C         | Top-K
------+------------------------+--------------------+---------------+------
-  1  | name (exact)           | country_std        | -             |  4
-  2  | name_root              | country_std        | -             |  4
-  3  | sorted_root            | country_std        | -             |  3
-  4  | street_digits          | root_prefix_3      | country_std   |  4
-  5  | unit_code              | root_prefix_3      | country_std   |  3
-  6  | postal_code            | root_prefix_3      | country_std   |  4
-  7  | postal_code            | street_digits      | country_std   |  3
-  8  | soundex_first          | postal_code        | country_std   |  4
-  9  | soundex_first          | street_digits      | country_std   |  4
- 10  | consonant_stem         | postal_code        | country_std   |  3
- 11  | consonant_stem         | street_digits      | country_std   |  3
- 12  | acronym                | street_digits      | country_std   |  3
- 13  | soundex_second         | postal_code        | country_std   |  3
- 14  | soundex_second         | street_digits      | country_std   |  3
- 15  | addr_core_prefix_4     | postal_code        | country_std   |  3
- 16  | root_prefix_2          | street_digits      | postal_code   |  3
- 17  | sorted_3gram           | postal_code        | country_std   |  3
- 18  | unit_code              | postal_code        | country_std   |  3
- 19  | addr_core (>=8 chars)  | country_std        | -             |  3
- 20  | soundex_first          | addr_core_prefix_4 | country_std   |  3
- 21  | name_root (>=5 chars)  | postal_code        | -             |  2
- 22  | consonant_stem         | addr_core_prefix_4 | country_std   |  3
- 23  | first_word (>=4 chars) | street_digits      | country_std   |  3
-```
+| Pass | Category | Key A | Key B | Key C | Top-K | Rationale |
+|:----:|:---------|:------|:------|:------|:-----:|:----------|
+| 1 | Name Exact | `name` (exact) | `country_std` | — | 4 | Catches identical cleaned names in the same country |
+| 2 | Name Stem | `name_root` | `country_std` | — | 4 | Legal-suffix-stripped root match within country |
+| 3 | Name Token-Sort | `sorted_root` | `country_std` | — | 3 | Word-order-agnostic root match (e.g., "Ali Bakery" vs "Bakery Ali") |
+| 4 | Address + Name | `street_digits` | `root_prefix_3` | `country_std` | 4 | Same door number + name prefix — strong address anchor |
+| 5 | Unit + Name | `unit_code` | `root_prefix_3` | `country_std` | 3 | Suite/shop number with name prefix |
+| 6 | PIN + Name | `postal_code` | `root_prefix_3` | `country_std` | 4 | Postal code + name prefix — broad area anchor |
+| 7 | PIN + Street | `postal_code` | `street_digits` | `country_std` | 3 | Same postcode AND door number — transliteration-robust |
+| 8 | Phonetic + PIN | `soundex_first` | `postal_code` | `country_std` | 4 | Phonetically similar first word in same postal area |
+| 9 | Phonetic + Street | `soundex_first` | `street_digits` | `country_std` | 4 | Phonetically similar first word at same door number |
+| 10 | Consonant + PIN | `consonant_stem` | `postal_code` | `country_std` | 3 | Consonant skeleton + postcode (script-independent) |
+| 11 | Consonant + Street | `consonant_stem` | `street_digits` | `country_std` | 3 | Consonant skeleton + door number |
+| 12 | Acronym + Street | `acronym` | `street_digits` | `country_std` | 3 | Abbreviated name vs. satellite full name at same address |
+| 13 | Phonetic2 + PIN | `soundex_second` | `postal_code` | `country_std` | 3 | Phonetic match on second name word + postcode |
+| 14 | Phonetic2 + Street | `soundex_second` | `street_digits` | `country_std` | 3 | Phonetic match on second name word + door number |
+| 15 | Addr Prefix + PIN | `addr_core_prefix_4` | `postal_code` | `country_std` | 3 | First 4 chars of stripped address + postcode |
+| 16 | 3-Key Address | `root_prefix_2` | `street_digits` | `postal_code` | 3 | Triple-anchor: name prefix + door + postcode (high precision) |
+| 17 | 3-Gram + PIN | `sorted_3gram` | `postal_code` | `country_std` | 3 | Sorted character 3-gram signature + postcode |
+| 18 | Unit + PIN | `unit_code` | `postal_code` | `country_std` | 3 | Suite number + postal code match |
+| 19 | Addr Core Exact | `addr_core` (≥8 chars) | `country_std` | — | 3 | Long stripped-address exact match within country |
+| 20 | Phonetic + Addr | `soundex_first` | `addr_core_prefix_4` | `country_std` | 3 | Phonetic name + address prefix — catches transliterations |
+| 21 | Name + PIN (global) | `name_root` (≥5 chars) | `postal_code` | — | 2 | Country-agnostic fallback: long root + postcode |
+| 22 | Consonant + Addr | `consonant_stem` | `addr_core_prefix_4` | `country_std` | 3 | Consonant skeleton + address prefix |
+| 23 | First Word + Street | `first_word` (≥4 chars) | `street_digits` | `country_std` | 3 | First meaningful name word + door number |
 
 **Derived blocking keys:**
 
-| Key | Derivation |
-|:----|:-----------|
-| `name_root` | Strip legal prefixes/suffixes, leet-normalize, lowercase |
-| `sorted_root` | Token-sort of `name_root` words |
-| `acronym` | First character of each `name_root` token concatenated |
-| `soundex_first` | Soundex code of first `name_root` word |
-| `soundex_second` | Soundex code of second `name_root` word |
-| `consonant_stem` | First 3 consonants of first word |
-| `sorted_3gram` | Sorted 4-char prefix of `name_root`, alphabetically sorted characters |
-| `street_digits` | Leading digit sequence extracted from `business_address` |
-| `postal_code` | 5-6 digit postal code extracted from `business_address` |
-| `unit_code` | Suite/unit/flat number extracted from `business_address` |
-| `addr_core` | Address with street-type tokens stripped |
-| `addr_core_prefix_4` | First 4 characters of `addr_core` |
-| `root_prefix_N` | First N characters of `name_root`, N in {2, 3, 4, 5} |
+| Key | Source Field | Derivation |
+|:----|:-------------|:-----------|
+| `name_root` | `business_name` | Strip legal prefixes/suffixes (Inc, LLC, SARL, …), leet-normalize, lowercase |
+| `sorted_root` | `name_root` | Token-sort words of `name_root` alphabetically and rejoin |
+| `acronym` | `name_root` | Concatenate first character of each `name_root` token |
+| `first_word` | `name_root` | First token of `name_root` |
+| `soundex_first` | `first_word` | Soundex code (4-char phonetic encoding) |
+| `soundex_second` | second token of `name_root` | Soundex code of second word |
+| `consonant_stem` | `first_word` | First 3 consonants of first word (script-independent skeleton) |
+| `sorted_3gram` | `name_root` | Alphabetically sorted characters of first 4-char prefix |
+| `root_prefix_N` | `name_root` | First N characters, N ∈ {2, 3, 4, 5} |
+| `street_digits` | `business_address` | Leading digit sequence (door/building number) |
+| `postal_code` | `business_address` | 5–6 digit postal/PIN code extracted via regex |
+| `unit_code` | `business_address` | Suite/unit/flat number extracted via regex |
+| `addr_core` | `business_address` | Address with street-type tokens stripped (rue, ave, blvd, …) |
+| `addr_core_prefix_4` | `addr_core` | First 4 characters of `addr_core` |
+| `country_std` | `country` | Canonicalized country code (USA → us, United Kingdom → gb, …) |
+
+
 
 ---
+
+
 
 ## 4. Pairwise Feature Engineering
 
