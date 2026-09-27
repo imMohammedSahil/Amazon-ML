@@ -16,11 +16,12 @@ htmlcov/
 *.swp
 *.swo
 
-# Large Data files & competition datasets (CRITICAL: Do not push gigabytes to Git)
+# Large data files & competition datasets
 6ab10eb3b23ba_student_resource/
 data/
 raw_data/
 *.csv
+*.tsv
 *.parquet
 *.feather
 *.h5
@@ -28,10 +29,38 @@ raw_data/
 *.npy
 *.npz
 
-# Model artifacts & temporary caches
+# Model artifacts, training logs, CatBoost cache
+catboost_info/
 models_cache/
 checkpoints/
 artifacts/
 logs/
-submission/
 *.log
+
+# Output / submission files
+output/
+submission/
+zip_outputs.py
+zip_match.py
+
+# Experiment & iteration scripts (not part of clean pipeline)
+aws_*.py
+lgbm_production_master.py
+lgbm_super_engine.py
+lgbm_turbo_master.py
+fast_offline_tuner.py
+fast_submit.py
+advanced_submit.py
+super_submit.py
+sota_ensemble_optimizer.py
+calibrate_precision_099.py
+train_eval_optimizer.py
+monitor.py
+
+# Internal planning / blueprint documents
+HACKATHON_FINALE_ROADMAP.md
+MASTER_BUSINESS_ENTITY_RESOLUTION_BLUEPRINT.md
+entity_resolution_blueprint_final.md
+
+# Competition PDF (large binary, not source code)
+*.pdf
