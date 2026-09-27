@@ -4,7 +4,7 @@ Multi-source record linkage across three heterogeneous business entity datasets.
 
 | Metric | Value |
 |---|---|
-| Public leaderboard (Macro F0.5) | 0.762 |
+| Public leaderboard (Macro F0.5) | 0.7616 |
 | Offline holdout (Macro F0.5) | 0.7779 |
 | Precision | 84.04% |
 | Recall | 68.49% |
@@ -437,4 +437,4 @@ pytest tests/ -v
 
 | Submission | Score | Timestamp | Status |
 |---|---|---|---|
-| LightGBM ensemble (`PROB_CUTOFF=0.992`) | 0.762 | Sep 26, 2026 11:41 PM IST | Public |
+| LightGBM ensemble (`PROB_CUTOFF=0.992`) | 0.7616 | Sep 26, 2026 11:41 PM IST | Public |
