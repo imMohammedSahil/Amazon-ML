@@ -294,25 +294,22 @@ Singleton accuracy is critical: a false positive on a singleton entity contribut
 
 Two submission strategies were evaluated against the 50,000-entity holdout:
 
-```
-Strategy                      | Macro F0.5 | Precision | Recall  | Notes
-------------------------------+------------+-----------+---------+----------------------
-LightGBM Ensemble (submitted) |  0.7779    |  84.04%   | 68.49%  | Submitted
-Rule-Only Precision Maximizer |  0.3523    |  99.10%   | 20.44%  | Recall collapse
-```
+| Strategy | Macro F0.5 | Precision | Recall | Notes |
+|:---------|:----------:|----------:|-------:|:------|
+| LightGBM Ensemble (submitted) | **0.7779** | 84.04% | 68.49% | Final submission |
+| Rule-Only Precision Maximizer | 0.3523 | 99.10% | 20.44% | Recall collapse — not submitted |
 
 The rule-only 99%+ precision approach catastrophically collapsed recall. Despite $F_{0.5}$ precision weighting, the metric still requires meaningful recall to avoid a near-zero score. The LightGBM ensemble with `PROB_CUTOFF = 0.992` achieves the best empirical balance.
 
 **Score sensitivity to PROB_CUTOFF threshold (offline holdout):**
 
-```
-PROB_CUTOFF | Macro F0.5 | Precision | Recall
-------------+------------+-----------+-------
-  0.990     |  0.7752    |  82.1%    | 70.3%
-  0.992     |  0.7779    |  84.04%   | 68.49%   <- selected
-  0.994     |  0.7703    |  86.5%    | 65.1%
-  0.996     |  0.7580    |  89.2%    | 60.4%
-```
+| PROB\_CUTOFF | Macro F0.5 | Precision | Recall | Notes |
+|:------------:|:----------:|----------:|-------:|:------|
+| 0.990 | 0.7752 | 82.1% | 70.3% | |
+| **0.992** | **0.7779** | **84.04%** | **68.49%** | Selected |
+| 0.994 | 0.7703 | 86.5% | 65.1% | |
+| 0.996 | 0.7580 | 89.2% | 60.4% | |
+
 
 ---
 
