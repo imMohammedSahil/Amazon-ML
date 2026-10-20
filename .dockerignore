@@ -1,0 +1,13 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.git
+.github
+catboost_info
+6ab10eb3b23ba_student_resource
+output
+submission
+artifacts
+*.pdf
