@@ -25,6 +25,8 @@ Multi-source record linkage across three heterogeneous business entity datasets.
 10. [Repository Layout](#10-repository-layout)
 11. [Setup and Execution](#11-setup-and-execution)
 12. [Dependencies](#12-dependencies)
+13. [Community & Governance](#13-community--governance)
+14. [Leaderboard](#leaderboard)
 
 ---
 
@@ -430,6 +432,17 @@ pytest tests/ -v
 | `scipy` | >= 1.10.0 | Sparse matrix operations |
 | `pyarrow` | >= 12.0.0 | Parquet/Arrow I/O backend for Polars |
 | `jellyfish` | >= 1.0.0 | Phonetic encoding (Soundex, NYSIIS) |
+
+---
+
+## 13. Community & Governance
+
+We are committed to maintaining an open, welcoming, and secure community:
+
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Contributing](CONTRIBUTING.md)
+- [MIT License](LICENSE)
+- [Security Policy](SECURITY.md)
 
 ---
 
