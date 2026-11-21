@@ -15,7 +15,7 @@ lightgbm>=4.0.0
 catboost>=1.2.0
 
 # Fast Cosine / Sparse Matrix Blocking
-sparse-dot-topn>=0.3.5
+sparse-dot-topn>=1.2.0
 
 # Utilities & Testing
 tqdm>=4.65.0
