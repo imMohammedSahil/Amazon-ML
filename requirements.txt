@@ -6,7 +6,7 @@ scipy>=1.10.0
 pyarrow>=12.0.0
 
 # Ultra-fast String & Pairwise Metrics
-rapidfuzz>=3.0.0
+rapidfuzz>=3.14.6
 jellyfish>=1.0.0
 
 # Machine Learning & Modeling
